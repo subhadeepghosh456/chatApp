@@ -1,6 +1,7 @@
 import User from "../model/user.model.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { errorHandler } from "../utils/errorHandler.js";
+import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
 
 export const register = asyncHandler(async (req, res, next) => {
@@ -27,12 +28,21 @@ export const register = asyncHandler(async (req, res, next) => {
   }
 
   user.password = undefined;
-
-  res.status(201).json({
-    success: true,
-    details: user,
-    message: "User registered successfully",
+  const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
+    expiresIn: process.env.JWT_EXPIRES_IN,
   });
+
+  res
+    .status(201)
+    .cookie("token", token, {
+      httpOnly: true,
+      expires: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
+    })
+    .json({
+      success: true,
+      details: user,
+      message: "User registered successfully",
+    });
 });
 
 export const login = asyncHandler(async (req, res, next) => {
@@ -51,15 +61,56 @@ export const login = asyncHandler(async (req, res, next) => {
     return next(new errorHandler("Wrong email or password", 409));
   }
   isUserExist.password = undefined;
-  res.status(200).json({
-    success: true,
-    details: isUserExist,
-    message: "User logged in successfully",
+  const token = jwt.sign({ id: isUserExist._id }, process.env.JWT_SECRET, {
+    expiresIn: process.env.JWT_EXPIRES_IN,
   });
+  res
+    .status(200)
+    .cookie("token", token, {
+      httpOnly: true,
+      expires: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
+    })
+    .json({
+      success: true,
+      details: isUserExist,
+      message: "User logged in successfully",
+    });
 });
 
 
-  
+export const getProfile = asyncHandler(async (req, res, next) => {
+  const user = await User.findById(req.user).select("-password");
+  if (!user) {
+    return next(new errorHandler("User not found", 404));
+  } 
+  res.status(200).json({
+    success: true,
+    details: user,
+    message: "User profile fetched successfully",
+  });
+});
 
- 
+export const logout = asyncHandler(async (req, res, next) => {
+  res
+    .status(200)
+    .cookie("token", "", {
+      httpOnly: true,
+      expires: new Date(Date.now()),
+    })
+    .json({
+      success: true,
+      message: "User logged out successfully",
+    });
+});
 
+export const getOtherUser = asyncHandler(async (req, res, next) => {
+  const users = await User.find({_id: {$ne: req.user}});
+  if (!users) {
+    return next(new errorHandler("User not found", 404));
+  } 
+  res.status(200).json({
+    success: true,
+    details: users,
+    message: "User profile fetched successfully",
+  });
+});
